@@ -13,13 +13,13 @@ provider "azurerm" {
   features {}
 }
 
-# 1️⃣ Resource Group
+# Resource Group
 resource "azurerm_resource_group" "rg" {
   name     = "rg-managed-identity-demo"
   location = "canadacentral"
 }
 
-# 2️⃣ Key Vault
+# Key Vault
 resource "azurerm_key_vault" "kv" {
   name                = "kv-managed-id-demo123"
   resource_group_name = azurerm_resource_group.rg.name
@@ -28,18 +28,16 @@ resource "azurerm_key_vault" "kv" {
   sku_name            = "standard"
 }
 
-# 3️⃣ Secret in Key Vault
-resource "azurerm_key_vault_secret" "demo_secret" {
-  name         = "DemoSecret"
-  value        = "SuperSecureValue123!"
+# Access Policy for Terraform SP (so Terraform can create the secret)
+resource "azurerm_key_vault_access_policy" "kv_policy_terraform" {
   key_vault_id = azurerm_key_vault.kv.id
+  tenant_id    = var.tenant_id
+  object_id    = var.client_object_id
 
-  depends_on = [
-    azurerm_key_vault_access_policy.kv_policy_app
-  ]
+  secret_permissions = ["Get", "List", "Set"]
 }
 
-# 4️⃣ App Service Plan
+# App Service Plan
 resource "azurerm_service_plan" "plan" {
   name                = "asp-managed-id-demo"
   resource_group_name = azurerm_resource_group.rg.name
@@ -48,7 +46,7 @@ resource "azurerm_service_plan" "plan" {
   sku_name            = "B1"
 }
 
-# 5️⃣ App Service with System Assigned Managed Identity
+# App Service with Managed Identity
 resource "azurerm_linux_web_app" "app" {
   name                = "demo-managed-id-app"
   resource_group_name = azurerm_resource_group.rg.name
@@ -64,11 +62,23 @@ resource "azurerm_linux_web_app" "app" {
   }
 }
 
-# 6️⃣ Grant App Identity Permission to Key Vault
+# Access Policy for the App to read Key Vault secret using Managed Identity
 resource "azurerm_key_vault_access_policy" "kv_policy_app" {
   key_vault_id = azurerm_key_vault.kv.id
   tenant_id    = var.tenant_id
   object_id    = azurerm_linux_web_app.app.identity[0].principal_id
 
   secret_permissions = ["Get", "List"]
+}
+
+# Secret in Key Vault (Terraform now has access, so this will succeed)
+resource "azurerm_key_vault_secret" "demo_secret" {
+  name         = "DemoSecret"
+  value        = "SuperSecureValue123!"
+  key_vault_id = azurerm_key_vault.kv.id
+
+  depends_on = [
+    azurerm_key_vault_access_policy.kv_policy_terraform,
+    azurerm_key_vault_access_policy.kv_policy_app
+  ]
 }
