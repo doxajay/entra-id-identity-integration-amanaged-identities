@@ -31,8 +31,12 @@ resource "azurerm_key_vault" "kv" {
 # 3️⃣ Secret in Key Vault
 resource "azurerm_key_vault_secret" "demo_secret" {
   name         = "DemoSecret"
-  value        = "ThisIsProtectedData"
+  value        = "SuperSecureValue123!"
   key_vault_id = azurerm_key_vault.kv.id
+
+  depends_on = [
+    azurerm_key_vault_access_policy.kv_policy_app
+  ]
 }
 
 # 4️⃣ App Service Plan
