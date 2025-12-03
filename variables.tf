@@ -1,4 +1,4 @@
 variable "tenant_id" {
-  type = string
+  description = "Azure AD Tenant ID"
+  type        = string
 }
-
