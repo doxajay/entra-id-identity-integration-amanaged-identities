@@ -1,6 +1,5 @@
 terraform {
   required_version = ">= 1.4.0"
-
   required_providers {
     azurerm = {
       source  = "hashicorp/azurerm"
@@ -13,25 +12,28 @@ provider "azurerm" {
   features {}
 }
 
-# 1️⃣ Resource Group
 resource "azurerm_resource_group" "rg" {
   name     = "rg-managed-identity-demo"
   location = "canadacentral"
 }
 
-# 2️⃣ Key Vault
 resource "azurerm_key_vault" "kv" {
   name                = "kv-managed-id-demo123"
   resource_group_name = azurerm_resource_group.rg.name
   location            = azurerm_resource_group.rg.location
   tenant_id           = var.tenant_id
   sku_name            = "standard"
-
-  soft_delete_retention_days = 7
-  purge_protection_enabled   = false
 }
 
-# 3️⃣ App Service Plan
+# ‼️ Allow Terraform Service Principal full access to secrets
+resource "azurerm_key_vault_access_policy" "kv_policy_sp" {
+  key_vault_id = azurerm_key_vault.kv.id
+  tenant_id    = var.tenant_id
+  object_id    = var.client_object_id
+
+  secret_permissions = ["Get", "List", "Set", "Delete"]
+}
+
 resource "azurerm_service_plan" "plan" {
   name                = "asp-managed-id-demo"
   resource_group_name = azurerm_resource_group.rg.name
@@ -40,7 +42,6 @@ resource "azurerm_service_plan" "plan" {
   sku_name            = "B1"
 }
 
-# 4️⃣ App Service with System-Assigned Managed Identity
 resource "azurerm_linux_web_app" "app" {
   name                = "demo-managed-id-app"
   resource_group_name = azurerm_resource_group.rg.name
@@ -56,7 +57,7 @@ resource "azurerm_linux_web_app" "app" {
   }
 }
 
-# 5️⃣ Allow Web App Identity to Access Key Vault
+# Grant WebApp permissions
 resource "azurerm_key_vault_access_policy" "kv_policy_app" {
   key_vault_id = azurerm_key_vault.kv.id
   tenant_id    = var.tenant_id
@@ -65,13 +66,14 @@ resource "azurerm_key_vault_access_policy" "kv_policy_app" {
   secret_permissions = ["Get", "List"]
 }
 
-# 6️⃣ Secret in Key Vault
+# Create secret AFTER both access policies exist
 resource "azurerm_key_vault_secret" "demo_secret" {
   name         = "DemoSecret"
   value        = "SuperSecureValue123!"
   key_vault_id = azurerm_key_vault.kv.id
 
   depends_on = [
+    azurerm_key_vault_access_policy.kv_policy_sp,
     azurerm_key_vault_access_policy.kv_policy_app
   ]
 }
